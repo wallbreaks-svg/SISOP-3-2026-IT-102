@@ -157,11 +157,21 @@ int main()
                     pesan[valread] = '\0';
 
                     // AUTH
-                    if (strncmp(pesan, "/auth", 5) == 0)
+                    if (strncmp(pesan, "/auth ", 6) == 0)
                     {
-                        is_admin[i] = 1;
-                        send(sd, "Admin mode aktif\n", 18, 0);
-                        tulis_log("Admin", "AUTH SUCCESS");
+                        char password[50];
+                        sscanf(pesan, "/auth %s", password);
+
+                        if (strcmp(password, "1234") == 0)
+                        {
+                            is_admin[i] = 1;
+                            send(sd, "Admin mode aktif\n", 18, 0);
+                            tulis_log("Admin", "AUTH SUCCESS");
+                        }
+                        else
+                        {
+                            send(sd, "Password salah\n", 15, 0);
+                        }
                         continue;
                     }
 

@@ -7,19 +7,36 @@
 #include "protocol.h"
 
 int sock;
-char pesan[MAX_BUFFER];
 
-// thread untuk kirim pesan
+// thread kirim pesan
 void *kirim_pesan(void *arg)
 {
+    char pesan[MAX_BUFFER];
+
     while (1)
     {
         fgets(pesan, MAX_BUFFER, stdin);
+
+        // hapus newline biar rapi
+        pesan[strcspn(pesan, "\n")] = 0;
+
+        if (strlen(pesan) == 0)
+            continue;
+
         send(sock, pesan, strlen(pesan), 0);
+
+        // kalau exit
+        if (strcmp(pesan, "/exit") == 0)
+        {
+            close(sock);
+            exit(0);
+        }
     }
+
+    return NULL;
 }
 
-// thread untuk menerima pesan
+// thread terima pesan
 void *terima_pesan(void *arg)
 {
     char buffer[MAX_BUFFER];
@@ -28,28 +45,36 @@ void *terima_pesan(void *arg)
     {
         int valread = recv(sock, buffer, MAX_BUFFER, 0);
 
-        if (valread > 0)
+        if (valread <= 0)
         {
-            buffer[valread] = '\0';
-            printf("%s", buffer);
+            printf("Disconnected from server\n");
+            close(sock);
+            exit(0);
         }
+
+        buffer[valread] = '\0';
+        printf("%s\n", buffer);
     }
+
+    return NULL;
 }
 
+// MAIN
 int main()
 {
     struct sockaddr_in server_addr;
 
-    // buat socket
     sock = socket(AF_INET, SOCK_STREAM, 0);
 
-    // setting server
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
     server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    // connect ke server
-    connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
+    if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+    {
+        perror("connect failed");
+        return 1;
+    }
 
     printf("Terhubung ke server!\n");
 
@@ -57,10 +82,10 @@ int main()
 
     printf("Masukkan username: ");
     fgets(nama, 50, stdin);
+    nama[strcspn(nama, "\n")] = 0;
 
-    // kirim ke server
     send(sock, nama, strlen(nama), 0);
-    // buat thread
+
     pthread_t t1, t2;
 
     pthread_create(&t1, NULL, kirim_pesan, NULL);
