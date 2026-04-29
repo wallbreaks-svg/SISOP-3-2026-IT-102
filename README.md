@@ -3,6 +3,7 @@
 ## Soal 1 - The Wired
 
 **Nama:** Achmad Rifqy Aqila
+
 **NRP:** 5027251102
 
 ---
