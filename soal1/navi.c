@@ -1,98 +1,81 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <pthread.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <string.h>
 #include "protocol.h"
 
-int sock;
-
-// thread kirim pesan
-void *kirim_pesan(void *arg)
-{
-    char pesan[MAX_BUFFER];
-
-    while (1)
-    {
-        fgets(pesan, MAX_BUFFER, stdin);
-
-        // hapus newline biar rapi
-        pesan[strcspn(pesan, "\n")] = 0;
-
-        if (strlen(pesan) == 0)
-            continue;
-
-        send(sock, pesan, strlen(pesan), 0);
-
-        // kalau exit
-        if (strcmp(pesan, "/exit") == 0)
-        {
-            close(sock);
-            exit(0);
-        }
-    }
-
-    return NULL;
-}
-
-// thread terima pesan
-void *terima_pesan(void *arg)
-{
-    char buffer[MAX_BUFFER];
-
-    while (1)
-    {
-        int valread = recv(sock, buffer, MAX_BUFFER, 0);
-
-        if (valread <= 0)
-        {
-            printf("Disconnected from server\n");
-            close(sock);
-            exit(0);
-        }
-
-        buffer[valread] = '\0';
-        printf("%s\n", buffer);
-    }
-
-    return NULL;
-}
-
-// MAIN
 int main()
 {
-    struct sockaddr_in server_addr;
+    int sock;
+    struct sockaddr_in server;
+    fd_set fds;
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
 
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(SERVER_PORT);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server.sin_family = AF_INET;
+    server.sin_port = htons(WIRED_PORT);
+    inet_pton(AF_INET, WIRED_HOST, &server.sin_addr);
 
-    if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+    // cek koneksi
+    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0)
     {
-        perror("connect failed");
+        perror("Connect failed");
         return 1;
     }
 
-    printf("Terhubung ke server!\n");
+    // input nama
+    char name[64];
+    printf("Enter your name: ");
+    fgets(name, sizeof(name), stdin);
+    name[strcspn(name, "\n")] = 0;
 
-    char nama[50];
+    send(sock, name, strlen(name), 0);
 
-    printf("Masukkan username: ");
-    fgets(nama, 50, stdin);
-    nama[strcspn(nama, "\n")] = 0;
+    // tampilkan prompt pertama
+    printf("> ");
+    fflush(stdout);
 
-    send(sock, nama, strlen(nama), 0);
+    while (1)
+    {
+        FD_ZERO(&fds);
+        FD_SET(STDIN_FILENO, &fds);
+        FD_SET(sock, &fds);
 
-    pthread_t t1, t2;
+        select(sock + 1, &fds, NULL, NULL, NULL);
 
-    pthread_create(&t1, NULL, kirim_pesan, NULL);
-    pthread_create(&t2, NULL, terima_pesan, NULL);
+        // input user
+        if (FD_ISSET(STDIN_FILENO, &fds))
+        {
+            char msg[WIRED_BUF];
 
-    pthread_join(t1, NULL);
-    pthread_join(t2, NULL);
+            fgets(msg, WIRED_BUF, stdin);
+            msg[strcspn(msg, "\n")] = 0;
 
+            send(sock, msg, strlen(msg), 0);
+
+            if (strcmp(msg, CMD_EXIT) == 0)
+                break;
+        }
+
+        // output dari server
+        if (FD_ISSET(sock, &fds))
+        {
+            char buf[WIRED_BUF];
+            int n = read(sock, buf, WIRED_BUF - 1);
+
+            if (n <= 0)
+                break;
+
+            buf[n] = '\0';
+
+            // 🔥 FIX UI BIAR RAPI
+            printf("\r%s\n> ", buf);
+            fflush(stdout);
+        }
+    }
+
+    close(sock);
     return 0;
 }
